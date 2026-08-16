@@ -8,7 +8,12 @@ access control - it only works for content Odysee already serves publicly.
 
 Usage:
     python extract_video_url.py "<odysee page url>"
+
+    # Multiple videos listed in a text file (one URL per line, blank
+    # lines and lines starting with # are ignored)
+    python extract_video_url.py -f urls.txt
 """
+import argparse
 import sys
 import json
 import urllib.parse
@@ -92,12 +97,17 @@ def resolve_final_url(stream_url: str) -> str:
         return e.geturl() if hasattr(e, "geturl") else stream_url
 
 
-def main() -> None:
-    if len(sys.argv) != 2:
-        print("Usage: python extract_video_url.py <odysee page url>")
-        sys.exit(1)
+def read_urls_from_file(path: str) -> list:
+    urls = []
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#"):
+                urls.append(line)
+    return urls
 
-    page_url = sys.argv[1]
+
+def extract_one(page_url: str) -> None:
     lbry_url = parse_odysee_url(page_url)
     print(f"Resolving: {lbry_url}")
 
@@ -109,6 +119,39 @@ def main() -> None:
     print(f"Title: {title}")
     print(f"Claim ID: {claim['claim_id']}")
     print(f"Direct video URL: {final_url}")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Extract the direct CDN URL for one or more Odysee videos."
+    )
+    parser.add_argument("url", nargs="?", help="Odysee page URL")
+    parser.add_argument(
+        "-f", "--file", help="Text file with one Odysee page URL per line"
+    )
+    args = parser.parse_args()
+
+    if not args.url and not args.file:
+        parser.print_usage()
+        sys.exit(1)
+
+    if args.file:
+        urls = read_urls_from_file(args.file)
+        if not urls:
+            print(f"No URLs found in {args.file}")
+            sys.exit(1)
+        failures = 0
+        for i, url in enumerate(urls, start=1):
+            print(f"\n[{i}/{len(urls)}] {url}")
+            try:
+                extract_one(url)
+            except Exception as e:
+                print(f"Failed: {e}")
+                failures += 1
+        print(f"\nCompleted {len(urls) - failures}/{len(urls)} extractions.")
+        sys.exit(1 if failures else 0)
+
+    extract_one(args.url)
     print("\nNote: this URL requires a Referer/Origin of https://odysee.com and a")
     print("browser-like User-Agent header to be accepted by the CDN (401 otherwise).")
 

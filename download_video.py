@@ -1,16 +1,22 @@
 """
-Download an Odysee video given its page URL.
+Download one or more Odysee videos given their page URL(s).
 
 This reuses the resolution logic from extract_video_url.py to find the
-direct CDN URL, then streams the video to a local file with a progress
-indicator.
+direct CDN URL for each video, then streams it to a local file with a
+progress indicator.
 
 Usage:
+    # Single video
     python download_video.py "<odysee page url>" [output_path]
 
-If output_path is omitted, the file is saved in the current directory
-using the video's title as the filename.
+    # Multiple videos listed in a text file (one URL per line, blank
+    # lines and lines starting with # are ignored)
+    python download_video.py -f urls.txt [-o output_dir]
+
+If output_path/output_dir is omitted, files are saved in the current
+directory using each video's title as the filename.
 """
+import argparse
 import os
 import re
 import sys
@@ -49,6 +55,16 @@ def format_size(num_bytes: float) -> str:
     return f"{num_bytes:.1f}TB"
 
 
+def read_urls_from_file(path: str) -> list[str]:
+    urls = []
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#"):
+                urls.append(line)
+    return urls
+
+
 def download_file(url: str, dest_path: str) -> None:
     req = urllib.request.Request(url, headers=CDN_HEADERS, method="GET")
     with urllib.request.urlopen(req, timeout=30) as resp:
@@ -79,14 +95,11 @@ def download_file(url: str, dest_path: str) -> None:
     print()
 
 
-def main() -> None:
-    if len(sys.argv) < 2 or len(sys.argv) > 3:
-        print("Usage: python download_video.py <odysee page url> [output_path]")
-        sys.exit(1)
+def download_video(page_url: str, dest_path: str | None = None) -> str:
+    """Resolve and download a single Odysee video page URL.
 
-    page_url = sys.argv[1]
-    output_arg = sys.argv[2] if len(sys.argv) == 3 else None
-
+    Returns the path the video was saved to (or already existed at).
+    """
     lbry_url = parse_odysee_url(page_url)
     print(f"Resolving: {lbry_url}")
 
@@ -97,19 +110,94 @@ def main() -> None:
     print(f"Title: {title}")
     print(f"Direct video URL: {final_url}")
 
-    if output_arg:
-        dest_path = output_arg
-    else:
+    if not dest_path:
         dest_path = sanitize_filename(title) + guess_extension(final_url)
 
+    if os.path.exists(dest_path):
+        print(f"Skipping (already exists): {dest_path}")
+        return dest_path
+
     print(f"Downloading to: {dest_path}")
+    download_file(final_url, dest_path)
+    print("Done.")
+    return dest_path
+
+
+def download_batch(urls: list[str], output_dir: str | None) -> int:
+    """Download every URL in the list, continuing past individual failures.
+
+    Returns the number of failures.
+    """
+    out_dir = output_dir or "."
+    os.makedirs(out_dir, exist_ok=True)
+
+    failures = []
+    for i, url in enumerate(urls, start=1):
+        print(f"\n[{i}/{len(urls)}] {url}")
+        try:
+            lbry_url = parse_odysee_url(url)
+            print(f"Resolving: {lbry_url}")
+            claim = resolve_claim(lbry_url)
+            title = claim.get("value", {}).get("title") or claim["claim_id"]
+            stream_url = build_stream_url(claim)
+            final_url = resolve_final_url(stream_url)
+            print(f"Title: {title}")
+
+            dest_path = os.path.join(
+                out_dir, sanitize_filename(title) + guess_extension(final_url)
+            )
+            if os.path.exists(dest_path):
+                print(f"Skipping (already exists): {dest_path}")
+                continue
+
+            print(f"Downloading to: {dest_path}")
+            download_file(final_url, dest_path)
+            print("Done.")
+        except Exception as e:
+            print(f"Failed: {e}")
+            failures.append(url)
+
+    print(f"\nCompleted {len(urls) - len(failures)}/{len(urls)} downloads.")
+    if failures:
+        print("Failed URLs:")
+        for url in failures:
+            print(f"  {url}")
+    return len(failures)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Download one or more Odysee videos.")
+    parser.add_argument("url", nargs="?", help="Odysee page URL")
+    parser.add_argument(
+        "output", nargs="?", help="Output file path (single URL mode only)"
+    )
+    parser.add_argument(
+        "-f", "--file", help="Text file with one Odysee page URL per line"
+    )
+    parser.add_argument(
+        "-o",
+        "--output-dir",
+        help="Directory to save downloaded videos into (batch mode)",
+    )
+    args = parser.parse_args()
+
+    if not args.url and not args.file:
+        parser.print_usage()
+        sys.exit(1)
+
+    if args.file:
+        urls = read_urls_from_file(args.file)
+        if not urls:
+            print(f"No URLs found in {args.file}")
+            sys.exit(1)
+        failures = download_batch(urls, args.output_dir)
+        sys.exit(1 if failures else 0)
+
     try:
-        download_file(final_url, dest_path)
+        download_video(args.url, args.output)
     except urllib.error.HTTPError as e:
         print(f"\nDownload failed: HTTP {e.code} {e.reason}")
         sys.exit(1)
-
-    print("Done.")
 
 
 if __name__ == "__main__":
