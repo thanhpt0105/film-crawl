@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+
+# Downloaded videos and partial downloads
+*.mp4
+*.mp4.part
+*.part
+*.mkv
+*.webm
+*.avi
