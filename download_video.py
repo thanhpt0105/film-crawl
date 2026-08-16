@@ -22,6 +22,7 @@ import os
 import re
 import socket
 import sys
+import time
 import urllib.error
 import urllib.request
 
@@ -34,7 +35,9 @@ from extract_video_url import (
 )
 
 CHUNK_SIZE = 1024 * 256  # 256 KB
-MAX_RETRIES = 3
+MAX_RETRIES = 8
+RETRY_BACKOFF_SECONDS = 5
+RATE_LIMIT_BACKOFF_SECONDS = 20
 
 
 def sanitize_filename(name: str) -> str:
@@ -69,16 +72,36 @@ def read_urls_from_file(path: str) -> list[str]:
 
 
 def download_file(url: str, dest_path: str) -> None:
+    """Download url to dest_path, resuming from a partial .part file (via
+    HTTP Range requests) and retrying with backoff on transient errors.
+    """
     tmp_path = dest_path + ".part"
 
     for attempt in range(1, MAX_RETRIES + 1):
-        req = urllib.request.Request(url, headers=CDN_HEADERS, method="GET")
+        resume_from = os.path.getsize(tmp_path) if os.path.exists(tmp_path) else 0
+
+        headers = dict(CDN_HEADERS)
+        if resume_from:
+            headers["Range"] = f"bytes={resume_from}-"
+
+        req = urllib.request.Request(url, headers=headers, method="GET")
         try:
             with urllib.request.urlopen(req, timeout=30) as resp:
-                total = resp.length or 0
-                downloaded = 0
+                resuming = resp.status == 206
+                if resume_from and not resuming:
+                    # Server ignored the Range request; start over.
+                    resume_from = 0
 
-                with open(tmp_path, "wb") as f:
+                content_range_total = None
+                content_range = resp.headers.get("Content-Range")
+                if content_range and "/" in content_range:
+                    content_range_total = int(content_range.rsplit("/", 1)[1])
+
+                total = content_range_total or ((resp.length or 0) + resume_from)
+                downloaded = resume_from
+
+                mode = "ab" if resuming and resume_from else "wb"
+                with open(tmp_path, mode) as f:
                     while True:
                         chunk = resp.read(CHUNK_SIZE)
                         if not chunk:
@@ -109,6 +132,18 @@ def download_file(url: str, dest_path: str) -> None:
 
             os.replace(tmp_path, dest_path)
             return
+        except urllib.error.HTTPError as e:
+            if e.code == 429:
+                if attempt == MAX_RETRIES:
+                    raise
+                wait = RATE_LIMIT_BACKOFF_SECONDS * attempt
+                print(
+                    f"\nRate limited (429), waiting {wait}s before retrying "
+                    f"({attempt}/{MAX_RETRIES})..."
+                )
+                time.sleep(wait)
+                continue
+            raise
         except (
             IOError,
             http.client.IncompleteRead,
@@ -116,11 +151,16 @@ def download_file(url: str, dest_path: str) -> None:
             socket.timeout,
             urllib.error.URLError,
         ) as e:
-            if os.path.exists(tmp_path):
-                os.remove(tmp_path)
             if attempt == MAX_RETRIES:
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
                 raise
-            print(f"\nDownload error ({e}), retrying ({attempt}/{MAX_RETRIES})...")
+            wait = RETRY_BACKOFF_SECONDS * attempt
+            print(
+                f"\nDownload error ({e}), waiting {wait}s before retrying "
+                f"({attempt}/{MAX_RETRIES})..."
+            )
+            time.sleep(wait)
 
 
 def resolve_video_info(page_url: str) -> tuple[str, str]:
