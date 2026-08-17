@@ -23,11 +23,16 @@ Usage:
 
 If output_path/output_dir is omitted, files are saved in the current
 directory using the video's title as the filename.
+
+To reduce the chance of YouTube throttling/blocking requests as automated
+traffic, batch mode waits between downloads and retries with backoff on
+failure.
 """
 import argparse
 import os
 import re
 import sys
+import time
 
 try:
     import yt_dlp
@@ -35,6 +40,10 @@ except ImportError:
     print("This script requires yt-dlp. Install it with:")
     print("    python -m pip install yt-dlp")
     sys.exit(1)
+
+MAX_RETRIES = 3
+RETRY_BACKOFF_SECONDS = 15
+BATCH_DELAY_SECONDS = 10
 
 
 def sanitize_filename(name: str) -> str:
@@ -125,8 +134,20 @@ def download_video(url: str, dest_path: str | None = None) -> str:
     }
 
     print(f"Downloading to: {final_guess}")
-    with yt_dlp.YoutubeDL(opts) as ydl:
-        ydl.download([url])
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                ydl.download([url])
+            break
+        except yt_dlp.utils.DownloadError as e:
+            if attempt == MAX_RETRIES:
+                raise
+            wait = RETRY_BACKOFF_SECONDS * attempt
+            print(
+                f"\nDownload error ({e}), waiting {wait}s before retrying "
+                f"({attempt}/{MAX_RETRIES})..."
+            )
+            time.sleep(wait)
     print("Done.")
     return final_guess
 
@@ -136,8 +157,10 @@ def download_batch(urls: list[str], output_dir: str | None) -> int:
     os.makedirs(out_dir, exist_ok=True)
 
     failures = []
+    downloaded_count = 0
     for i, url in enumerate(urls, start=1):
         print(f"\n[{i}/{len(urls)}] {url}")
+
         try:
             title = fetch_title(url)
             print(f"Title: {title}")
@@ -146,6 +169,10 @@ def download_batch(urls: list[str], output_dir: str | None) -> int:
             if os.path.exists(dest_path):
                 print(f"Skipping (already exists): {dest_path}")
                 continue
+
+            if downloaded_count > 0:
+                print(f"Waiting {BATCH_DELAY_SECONDS}s before next download...")
+                time.sleep(BATCH_DELAY_SECONDS)
 
             out_template = os.path.join(out_dir, sanitize_filename(title) + ".%(ext)s")
             opts = {
@@ -161,9 +188,22 @@ def download_batch(urls: list[str], output_dir: str | None) -> int:
             }
 
             print(f"Downloading to: {dest_path}")
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                ydl.download([url])
+            for attempt in range(1, MAX_RETRIES + 1):
+                try:
+                    with yt_dlp.YoutubeDL(opts) as ydl:
+                        ydl.download([url])
+                    break
+                except yt_dlp.utils.DownloadError as e:
+                    if attempt == MAX_RETRIES:
+                        raise
+                    wait = RETRY_BACKOFF_SECONDS * attempt
+                    print(
+                        f"\nDownload error ({e}), waiting {wait}s before "
+                        f"retrying ({attempt}/{MAX_RETRIES})..."
+                    )
+                    time.sleep(wait)
             print("Done.")
+            downloaded_count += 1
         except Exception as e:
             print(f"Failed: {e}")
             failures.append(url)
