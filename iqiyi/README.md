@@ -4,15 +4,13 @@ Download iQIYI videos and subtitles interactively or in batch. Subtitles can als
 
 ## Requirements
 
-Python 3.10 or later. Set up a virtual environment in this directory:
+Python 3.10 or later. Use the shared `.venv` and follow the setup instructions in the repository [README](../README.md). To install only iQIYI dependencies into that environment, run this from the repository root:
 
 ```powershell
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
+python -m pip install -r iqiyi/requirements.txt
 ```
 
-Export your iQIYI browser cookies in Netscape format to `cookies/cookies.txt`. Cookie files are private and are not included in the repository. On Windows, `N_m3u8DL-RE` and FFmpeg are downloaded into `tools/` automatically for video downloads.
+Activate the root `.venv` in each new terminal, then change into this directory before running a command. Export your iQIYI browser cookies in Netscape format to `cookies/cookies.txt`. Cookie files are private and are not included in the repository. On Windows, `N_m3u8DL-RE` and FFmpeg are downloaded into `tools/` automatically for video downloads.
 
 ## Interactive Download
 

@@ -4,15 +4,13 @@ Download one or many YouTube videos using `yt-dlp`. The downloader prefers a com
 
 ## Requirements
 
-Python 3.10 or later. Set up a virtual environment in this directory:
+Python 3.10 or later. Use the shared `.venv` and follow the setup instructions in the repository [README](../README.md). To install only YouTube dependencies into that environment, run this from the repository root:
 
 ```powershell
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
+python -m pip install -r youtube/requirements.txt
 ```
 
-Activate `.venv` in each new terminal before running the downloader.
+Activate the root `.venv` in each new terminal, then change into this directory before running the downloader.
 
 ## Download
 

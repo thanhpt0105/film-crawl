@@ -12,7 +12,15 @@ Film Crawl is a collection of command-line download tools, organized by service.
 
 ## Setup
 
-Use Python 3.10 or later. Each service manages its own dependencies; follow that service's README and run its commands from inside its directory. This keeps optional packages and runtime files separate.
+Use Python 3.10 or later. Create one virtual environment at the repository root and install the combined requirements:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+```
+
+Activate this environment once in each new terminal. Then change into a service directory before running its `main.py`; this keeps each downloader's relative input, cookie, and output paths separate. The service-specific `requirements.txt` files can also be installed into the same environment when you only need selected services. Odysee and Dailymotion use only the Python standard library.
 
 ## Privacy and generated files
 

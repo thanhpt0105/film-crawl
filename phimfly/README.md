@@ -4,15 +4,13 @@ Download subtitles from Phimfly episode pages and list all episode links in a se
 
 ## Requirements
 
-Python 3.10 or later. Set up a virtual environment in this directory:
+Python 3.10 or later. Use the shared `.venv` and follow the setup instructions in the repository [README](../README.md). To install only Phimfly dependencies into that environment, run this from the repository root:
 
 ```powershell
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
+python -m pip install -r phimfly/requirements.txt
 ```
 
-Export browser cookies for `phimfly.com` in Netscape format to `cookies/cookies.txt`. Cookie files are private and are not included in the repository.
+Activate the root `.venv` in each new terminal, then change into this directory before running a command. Export browser cookies for `phimfly.com` in Netscape format to `cookies/cookies.txt`. Cookie files are private and are not included in the repository.
 
 ## Download Subtitles
 
