@@ -15,13 +15,17 @@ Dailymotion, and YouTube.
 
 - Python 3.10+.
 - `extract_video_url.py` and `download_video.py` (Odysee) and `download_dailymotion_video.py` (Dailymotion) have no third-party dependencies.
-- `download_youtube_video.py` requires `yt-dlp`, installed in a project-local virtual environment (do not install packages globally):
+- `download_youtube_video.py` requires `yt-dlp` and `imageio-ffmpeg`, installed in a project-local virtual environment (do not install packages globally):
 
 ```powershell
 python -m venv .venv
 .venv\Scripts\Activate.ps1
-python -m pip install yt-dlp
+python -m pip install yt-dlp imageio-ffmpeg
 ```
+
+`imageio-ffmpeg` bundles a portable `ffmpeg` binary (no system-wide/admin
+install needed), used to merge separate video+audio streams when YouTube
+doesn't offer a pre-muxed format for a video.
 
 Activate the venv (`.venv\Scripts\Activate.ps1`) in each new terminal session before running `download_youtube_video.py`.
 
@@ -92,8 +96,16 @@ python download_youtube_video.py -f urls.txt -o downloads
 - The Odysee CDN requires a browser-like `User-Agent` and a `Referer`/`Origin`
   of `https://odysee.com`, otherwise it responds with `401 Unauthorized`.
   Both Odysee scripts send these headers automatically.
-- The YouTube downloader restricts format selection to pre-muxed
-  (audio+video combined) streams, since this environment has no `ffmpeg` (for
-  merging separate streams) or JS runtime (needed to decipher some DASH-only
-  formats).
+- The YouTube downloader prefers a pre-muxed (audio+video combined) stream
+  when available, and otherwise falls back to downloading the best separate
+  video and audio streams and merging them with `ffmpeg` (via `imageio-ffmpeg`).
+  Keep `yt-dlp` up to date (`python -m pip install --upgrade yt-dlp`) since
+  YouTube changes its extraction logic frequently and outdated versions can
+  start failing with `403` errors.
 - Downloaded video files, `.venv/`, and `__pycache__/` are excluded via [.gitignore](.gitignore).
+
+- Rename guide: rename 's/.*TẬP\s*(\d+).*\.mp4$/TheLegendOfLiuYong S01E$1.mp4/' *.mp4
+
+
+rename -n 's/.*Ep(\d+)\.mkv$/Legend of the Condor Heroes S01E$1.mkv/' *.mkv
+rename 's/.*E(\d+)\.mkv$/LaughingInTheWind S01E$1.mkv/' *.mkv

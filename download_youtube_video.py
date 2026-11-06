@@ -11,7 +11,11 @@ scripts in this repo (single URL, or batch via -f/-o).
 Requirements:
     python -m venv .venv
     .venv\Scripts\Activate.ps1
-    python -m pip install yt-dlp
+    python -m pip install yt-dlp imageio-ffmpeg
+
+imageio-ffmpeg bundles a portable ffmpeg binary (no system-wide/global
+install needed) used to merge separate video+audio streams, since YouTube
+does not always offer a pre-muxed (single file) format.
 
 Usage:
     # Single video
@@ -44,6 +48,40 @@ except ImportError:
 MAX_RETRIES = 3
 RETRY_BACKOFF_SECONDS = 15
 BATCH_DELAY_SECONDS = 10
+
+
+def find_ffmpeg() -> str | None:
+    """Return a path to an ffmpeg executable, preferring a portable binary
+    installed via the imageio-ffmpeg package (no system/global install
+    required), falling back to one already on PATH.
+    """
+    try:
+        import imageio_ffmpeg
+
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        pass
+
+    import shutil
+
+    return shutil.which("ffmpeg")
+
+
+FFMPEG_PATH = find_ffmpeg()
+
+# Prefer a pre-muxed stream (no ffmpeg needed) when available, otherwise
+# fall back to merging the best separate video+audio streams (requires
+# ffmpeg).
+FORMAT_WITH_FFMPEG = (
+    "best[acodec!=none][vcodec!=none][ext=mp4]/"
+    "best[acodec!=none][vcodec!=none]/"
+    "bestvideo[ext=mp4]+bestaudio[ext=m4a]/"
+    "bestvideo+bestaudio/best"
+)
+FORMAT_WITHOUT_FFMPEG = (
+    "best[acodec!=none][vcodec!=none][ext=mp4]/"
+    "best[acodec!=none][vcodec!=none]"
+)
 
 
 def sanitize_filename(name: str) -> str:
@@ -123,15 +161,15 @@ def download_video(url: str, dest_path: str | None = None) -> str:
 
     opts = {
         "outtmpl": out_template,
-        "format": (
-            "best[acodec!=none][vcodec!=none][ext=mp4]/"
-            "best[acodec!=none][vcodec!=none]"
-        ),
+        "format": FORMAT_WITH_FFMPEG if FFMPEG_PATH else FORMAT_WITHOUT_FFMPEG,
+        "merge_output_format": "mp4",
         "progress_hooks": [make_progress_hook()],
         "quiet": True,
         "no_warnings": True,
         "noprogress": True,
     }
+    if FFMPEG_PATH:
+        opts["ffmpeg_location"] = FFMPEG_PATH
 
     print(f"Downloading to: {final_guess}")
     for attempt in range(1, MAX_RETRIES + 1):
@@ -177,15 +215,15 @@ def download_batch(urls: list[str], output_dir: str | None) -> int:
             out_template = os.path.join(out_dir, sanitize_filename(title) + ".%(ext)s")
             opts = {
                 "outtmpl": out_template,
-                "format": (
-                    "best[acodec!=none][vcodec!=none][ext=mp4]/"
-                    "best[acodec!=none][vcodec!=none]"
-                ),
+                "format": FORMAT_WITH_FFMPEG if FFMPEG_PATH else FORMAT_WITHOUT_FFMPEG,
+                "merge_output_format": "mp4",
                 "progress_hooks": [make_progress_hook()],
                 "quiet": True,
                 "no_warnings": True,
                 "noprogress": True,
             }
+            if FFMPEG_PATH:
+                opts["ffmpeg_location"] = FFMPEG_PATH
 
             print(f"Downloading to: {dest_path}")
             for attempt in range(1, MAX_RETRIES + 1):

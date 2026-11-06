@@ -31,6 +31,8 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections import deque
+from concurrent.futures import ThreadPoolExecutor
 
 METADATA_API = "https://www.dailymotion.com/player/metadata/video/{}"
 
@@ -40,9 +42,14 @@ HEADERS = {
         "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
     ),
     "Referer": "https://www.dailymotion.com/",
+    # Cloudflare in front of the HLS manifest returns 403 without these.
+    "Origin": "https://www.dailymotion.com",
+    "Accept": "*/*",
+    "Accept-Encoding": "identity",
 }
 
 MAX_RETRIES = 8
+DOWNLOAD_WORKERS = 16
 RETRY_BACKOFF_SECONDS = 3
 RATE_LIMIT_BACKOFF_SECONDS = 15
 
@@ -210,10 +217,15 @@ def download_segments(segments: list[str], dest_path: str) -> None:
     # Resume: if a .part file exists with fewer bytes than expected, we
     # can't know how many whole segments it holds reliably, so restart
     # cleanly rather than risk corrupting the stream.
-    with open(tmp_path, "wb") as f:
-        for i, seg_url in enumerate(segments, start=1):
-            data = download_segment(seg_url)
-            f.write(data)
+    # Bounded window of in-flight futures keeps memory low while writing in order.
+    with open(tmp_path, "wb") as f, ThreadPoolExecutor(DOWNLOAD_WORKERS) as pool:
+        pending: deque = deque()
+        next_idx = 0
+        for i in range(1, total + 1):
+            while next_idx < total and len(pending) < DOWNLOAD_WORKERS * 2:
+                pending.append(pool.submit(download_segment, segments[next_idx]))
+                next_idx += 1
+            f.write(pending.popleft().result())
             percent = i * 100 / total
             print(f"\rSegment {i}/{total} ({percent:5.1f}%)", end="", flush=True)
 
