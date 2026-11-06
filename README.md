@@ -25,7 +25,7 @@ Activate this environment once in each new terminal. Then change into a service 
 
 ## Shared Sonarr Renamer
 
-The root-level `rename_sonarr.py` works with output from any downloader. It previews changes by default, recognizes language names and codes in subtitle filenames, and infers seasons from `SxxEyy` names unless `--season` is supplied.
+The root-level `rename_sonarr.py` works with output from any downloader. It previews changes by default, recognizes language names and codes in subtitle filenames, and infers seasons from `SxxEyy` names unless `--season` is supplied. Files are moved into `Downloads/<Show>/` with videos at the show-folder root. If subtitles contain multiple recognized languages, each language gets a subfolder such as `en/` or `vi/`; a single subtitle language stays at the show-folder root. Dry-run output shows full source and destination paths.
 
 ```powershell
 python rename_sonarr.py --show The.Lament.of.Autumn --downloads iqiyi/Downloads

@@ -125,6 +125,7 @@ def plan_renames(downloads_dir: Path, show: str, season: int | None, resolution:
     plans = []
     skipped = []
     processed_subs = set()
+    show_dir = downloads_dir / show
 
     def is_ignored(path: Path) -> bool:
         return any(part.lower() in ignore_dirs for part in path.relative_to(downloads_dir).parts[:-1])
@@ -132,6 +133,8 @@ def plan_renames(downloads_dir: Path, show: str, season: int | None, resolution:
     all_files = [p for p in downloads_dir.rglob("*") if p.is_file() and not is_ignored(p)]
     all_subs = sorted(p for p in all_files if p.suffix.lower() in SUB_EXTS)
     all_videos = sorted(p for p in all_files if p.suffix.lower() in VIDEO_EXTS)
+    languages = {lang for sub in all_subs if (lang := extract_lang_token(sub.stem))}
+    separate_language_dirs = len(languages) > 1
     videos_per_dir = {}
     for v in all_videos:
         videos_per_dir[v.parent] = videos_per_dir.get(v.parent, 0) + 1
@@ -142,6 +145,24 @@ def plan_renames(downloads_dir: Path, show: str, season: int | None, resolution:
             return True
         return sub.stem == video.stem or sub.stem.startswith(video.stem + ".")
 
+    def subtitle_target(sub: Path, new_base: str, video_stem: str | None = None) -> Path:
+        lang = extract_lang_token(sub.stem)
+        if sub.stem == video_stem:
+            filename = f"{new_base}{sub.suffix.lower()}"
+        elif lang:
+            filename = f"{new_base}.{lang}{sub.suffix.lower()}"
+        else:
+            tail = sub.stem
+            if video_stem:
+                tail = tail.replace(video_stem, "")
+            tail = tail.strip("._- ")
+            tail = re.sub(r"\s+", ".", tail)
+            tail = re.sub(r"[^A-Za-z0-9.\-]+", "", tail)
+            filename = f"{new_base}.{tail}{sub.suffix.lower()}" if tail else f"{new_base}{sub.suffix.lower()}"
+
+        destination = show_dir / lang if separate_language_dirs and lang else show_dir
+        return destination / filename
+
     for video in all_videos:
         source_text = f"{video.parent.name}.{video.stem}"
         episode = infer_episode_number(source_text)
@@ -151,23 +172,12 @@ def plan_renames(downloads_dir: Path, show: str, season: int | None, resolution:
 
         season_number = season if season is not None else infer_season_number(source_text) or 1
         new_base = build_new_basename(show, season_number, episode, resolution)
-        new_video = video.with_name(f"{new_base}{video.suffix.lower()}")
+        new_video = show_dir / f"{new_base}{video.suffix.lower()}"
         plans.append((video, new_video))
 
         for sub in sorted(p for p in video.parent.iterdir() if p.suffix.lower() in SUB_EXTS and belongs_to(p, video)):
             processed_subs.add(sub)
-            if sub.stem == video.stem:
-                new_sub = sub.with_name(f"{new_base}{sub.suffix.lower()}")
-            else:
-                lang = extract_lang_token(sub.stem)
-                if lang:
-                    new_sub = sub.with_name(f"{new_base}.{lang}{sub.suffix.lower()}")
-                else:
-                    tail = sub.stem.replace(video.stem, "").strip("._- ")
-                    tail = re.sub(r"\s+", ".", tail)
-                    tail = re.sub(r"[^A-Za-z0-9.\-]+", "", tail)
-                    new_sub = sub.with_name(f"{new_base}.{tail}{sub.suffix.lower()}") if tail else sub.with_name(f"{new_base}{sub.suffix.lower()}")
-            plans.append((sub, new_sub))
+            plans.append((sub, subtitle_target(sub, new_base, video.stem)))
 
     # Handle subtitle-only folders/files (episodes with no downloaded video).
     for sub in all_subs:
@@ -182,16 +192,7 @@ def plan_renames(downloads_dir: Path, show: str, season: int | None, resolution:
 
         season_number = season if season is not None else infer_season_number(source_text) or 1
         new_base = build_new_basename(show, season_number, episode, resolution)
-        lang = extract_lang_token(sub.stem)
-        if not lang:
-            # Unknown language name: keep the trailing token so different languages don't collide.
-            tail = re.sub(r"[^A-Za-z0-9\-]+", "", sub.stem.rsplit(".", 1)[-1])
-            lang = tail if "." in sub.stem and not tail.isdigit() else None
-        if lang:
-            new_sub = sub.with_name(f"{new_base}.{lang}{sub.suffix.lower()}")
-        else:
-            new_sub = sub.with_name(f"{new_base}{sub.suffix.lower()}")
-        plans.append((sub, new_sub))
+        plans.append((sub, subtitle_target(sub, new_base)))
 
     return plans, skipped
 
@@ -205,10 +206,11 @@ def apply_plans(plans, dry_run: bool):
             print(f"[SKIP] Target exists: {new}")
             continue
         if dry_run:
-            print(f"[DRY] {old.name} -> {new.name}")
+            print(f"[DRY] {old} -> {new}")
         else:
+            new.parent.mkdir(parents=True, exist_ok=True)
             old.rename(new)
-            print(f"[OK ] {old.name} -> {new.name}")
+            print(f"[OK ] {old} -> {new}")
             renamed += 1
     return renamed
 
