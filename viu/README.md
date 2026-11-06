@@ -45,3 +45,12 @@ python main.py --url-file episode_urls.txt --output Downloads
 ```
 
 Subtitles are saved under `Downloads/<series>/` as `<series>.E01.<language>.srt`. Existing files are skipped, and failures for one episode do not stop the rest of the batch.
+
+## Sonarr Naming
+
+Use the shared [Sonarr renamer](../rename_sonarr.py) from this directory. It infers the episode number from Viu's `E01` filename suffix and uses season 1 unless the name or `--season` specifies another season. Preview first; renaming is a dry run unless `--apply` is passed:
+
+```powershell
+python ..\rename_sonarr.py --show In.Between --downloads Downloads
+python ..\rename_sonarr.py --show In.Between --downloads Downloads --apply
+```
