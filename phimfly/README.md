@@ -43,3 +43,12 @@ python episode_links.py "https://phimfly.com/watch/AkBu" --out episode_urls.txt
 ```
 
 The link tool uses the same cookies. It refuses to overwrite an existing output file unless `--force` is provided. Feed the generated links to the subtitle downloader with `--url-file`.
+
+## Sonarr Naming
+
+Run the shared renamer from this directory to process Phimfly subtitle-only folders. It detects Phimfly's language prefixes and infers the season from the episode title when available:
+
+```powershell
+python ..\rename_sonarr.py --show A.Shop.For.Killers --downloads Downloads\Phimfly
+python ..\rename_sonarr.py --show A.Shop.For.Killers --downloads Downloads\Phimfly --apply
+```

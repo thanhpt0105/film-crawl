@@ -41,12 +41,6 @@ def sanitize_show_name(name: str) -> str:
 
 
 def strip_accents(text: str) -> str:
-    replacements = {
-        "a": "a", "A": "A", "e": "e", "E": "E", "i": "i", "I": "I",
-        "o": "o", "O": "O", "u": "u", "U": "U", "y": "y", "Y": "Y",
-        "d": "d", "D": "D",
-    }
-    # Small Vietnamese folding for language token parsing only.
     fold_table = str.maketrans({
         "a": "a", "A": "A", "e": "e", "E": "E", "i": "i", "I": "I",
         "o": "o", "O": "O", "u": "u", "U": "U", "y": "y", "Y": "Y",
@@ -70,9 +64,9 @@ def strip_accents(text: str) -> str:
 
 def infer_episode_number(text: str) -> int | None:
     patterns = [
-        r"[Tt][aăâ]p[\s._-]*(\d{1,4})",
-        r"[Ee]pisode[\s._-]*(\d{1,4})",
         r"\b[Ss](\d{1,2})[Ee](\d{1,3})\b",
+        r"[Tt][aăâ]p[\s._-]*(\d{1,4})",
+        r"\b(?:[Ee]pisode|[Ee]p)[\s._-]*(\d{1,4})\b",
         r"\b[Ee](\d{1,3})\b",
         r"\b(\d{1,3})\b",
     ]
@@ -87,23 +81,31 @@ def infer_episode_number(text: str) -> int | None:
     return None
 
 
+def infer_season_number(text: str) -> int | None:
+    match = re.search(r"\b[Ss](\d{1,2})[Ee]\d{1,3}\b", text)
+    return int(match.group(1)) if match else None
+
+
 def extract_lang_token(stem: str) -> str | None:
     folded = strip_accents(stem).lower()
 
-    # Fast path for files already using language codes (e.g. .en.srt, .zh-Hans.srt).
     code_map = {
-        "en": "en",
-        "vi": "vi",
-        "id": "id",
-        "ms": "ms",
-        "zh-hans": "zh-Hans",
-        "zh-hant": "zh-Hant",
+        "ar": "ar", "bg": "bg", "bn": "bn", "cs": "cs", "da": "da",
+        "de": "de", "el": "el", "en": "en", "en-uk": "en", "en-us": "en",
+        "es": "es", "es-419": "es", "es-es": "es", "et": "et", "fi": "fi",
+        "fr": "fr", "fr-ca": "fr", "fr-fr": "fr", "he": "he", "hi": "hi",
+        "hr": "hr", "hu": "hu", "id": "id", "is": "is", "it": "it",
+        "ja": "ja", "ko": "ko", "ms": "ms", "nl": "nl", "no": "no",
+        "pl": "pl", "pt": "pt", "pt-br": "pt", "ro": "ro", "ru": "ru",
+        "sk": "sk", "sl": "sl", "sr": "sr", "sv": "sv", "ta": "ta",
+        "te": "te", "th": "th", "tr": "tr", "uk": "uk", "vi": "vi",
+        "vi-vn": "vi", "zh": "zh", "cmn-hans": "zh-Hans",
+        "cmn-hant": "zh-Hant", "yue-hant": "zh-Hant",
     }
     tokens = re.split(r"[.\s_]+", folded)
-    if tokens:
-        last = tokens[-1]
-        if last in code_map:
-            return code_map[last]
+    for token in (tokens[0], tokens[-1]):
+        if token in code_map:
+            return code_map[token]
 
     # Assume language is often at the end after last dot.
     tail = folded.split(".")[-2:]
@@ -119,7 +121,7 @@ def build_new_basename(show: str, season: int, episode: int, resolution: str) ->
     return f"{show}.S{season:02d}E{episode:02d}.{resolution}"
 
 
-def plan_renames(downloads_dir: Path, show: str, season: int, resolution: str, ignore_dirs=("archive",)):
+def plan_renames(downloads_dir: Path, show: str, season: int | None, resolution: str, ignore_dirs=("archive",)):
     plans = []
     skipped = []
     processed_subs = set()
@@ -147,7 +149,8 @@ def plan_renames(downloads_dir: Path, show: str, season: int, resolution: str, i
             skipped.append((video, "Could not infer episode number"))
             continue
 
-        new_base = build_new_basename(show, season, episode, resolution)
+        season_number = season if season is not None else infer_season_number(source_text) or 1
+        new_base = build_new_basename(show, season_number, episode, resolution)
         new_video = video.with_name(f"{new_base}{video.suffix.lower()}")
         plans.append((video, new_video))
 
@@ -177,7 +180,8 @@ def plan_renames(downloads_dir: Path, show: str, season: int, resolution: str, i
             skipped.append((sub, "Could not infer episode number"))
             continue
 
-        new_base = build_new_basename(show, season, episode, resolution)
+        season_number = season if season is not None else infer_season_number(source_text) or 1
+        new_base = build_new_basename(show, season_number, episode, resolution)
         lang = extract_lang_token(sub.stem)
         if not lang:
             # Unknown language name: keep the trailing token so different languages don't collide.
@@ -210,11 +214,13 @@ def apply_plans(plans, dry_run: bool):
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Rename downloaded files to Sonarr-style naming."
-    )
+    parser = argparse.ArgumentParser(description="Rename downloaded files from any service to Sonarr-style naming.")
     parser.add_argument("--show", required=True, help="Show name, e.g. The.Lament.of.Autumn")
-    parser.add_argument("--season", type=int, default=1, help="Season number (default: 1)")
+    parser.add_argument(
+        "--season",
+        type=int,
+        help="Season number override (default: infer SxxEyy from names, otherwise 1)",
+    )
     parser.add_argument("--resolution", default="1080p", help="Quality tag (default: 1080p)")
     parser.add_argument("--downloads", default="Downloads", help="Downloads folder path")
     parser.add_argument(

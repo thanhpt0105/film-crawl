@@ -57,11 +57,11 @@ The `--out` option overwrites the specified file. Use the resulting list with `b
 
 ## Sonarr Naming
 
-Preview renames before applying them:
+Use the shared renamer from this directory so `Downloads/` resolves to the iQIYI output folder:
 
 ```powershell
-python rename_sonarr.py --show The.Lament.of.Autumn --season 1
-python rename_sonarr.py --show The.Lament.of.Autumn --season 1 --apply
+python ..\rename_sonarr.py --show The.Lament.of.Autumn
+python ..\rename_sonarr.py --show The.Lament.of.Autumn --apply
 ```
 
-The rename tool skips `Archive` folders by default. See `python rename_sonarr.py --help` for all options.
+Season numbers are inferred from `SxxEyy` names when available; use `--season` to override. The tool skips `Archive` folders by default.

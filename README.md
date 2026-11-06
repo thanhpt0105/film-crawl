@@ -22,6 +22,18 @@ python -m pip install -r requirements.txt
 
 Activate this environment once in each new terminal. Then change into a service directory before running its `main.py`; this keeps each downloader's relative input, cookie, and output paths separate. The service-specific `requirements.txt` files can also be installed into the same environment when you only need selected services. Odysee and Dailymotion use only the Python standard library.
 
+## Shared Sonarr Renamer
+
+The root-level `rename_sonarr.py` works with output from any downloader. It previews changes by default, recognizes language names and codes in subtitle filenames, and infers seasons from `SxxEyy` names unless `--season` is supplied.
+
+```powershell
+python rename_sonarr.py --show The.Lament.of.Autumn --downloads iqiyi/Downloads
+python rename_sonarr.py --show The.Lament.of.Autumn --downloads iqiyi/Downloads --apply
+python rename_sonarr.py --show A.Shop.For.Killers --downloads phimfly/Downloads/Phimfly
+```
+
+See `python rename_sonarr.py --help` for resolution and ignored-folder options.
+
 ## Privacy and generated files
 
 Do not commit browser cookies or other authentication data. Each service README explains where its local cookie file belongs. Virtual environments, logs, downloaded media, temporary files, and bootstrapped executables are excluded by [.gitignore](.gitignore).
