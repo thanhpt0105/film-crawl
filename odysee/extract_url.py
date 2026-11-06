@@ -7,11 +7,11 @@ format Odysee's own "Download" button produces. It does not bypass any
 access control - it only works for content Odysee already serves publicly.
 
 Usage:
-    python extract_video_url.py "<odysee page url>"
+    python extract_url.py "<odysee page url>"
 
     # Multiple videos listed in a text file (one URL per line, blank
     # lines and lines starting with # are ignored)
-    python extract_video_url.py -f urls.txt
+    python extract_url.py -f urls.txt
 """
 import argparse
 import sys

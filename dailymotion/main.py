@@ -14,11 +14,11 @@ No third-party dependencies (no ffmpeg required).
 
 Usage:
     # Single video
-    python download_dailymotion_video.py "<dailymotion url or video id>" [output_path]
+    python main.py "<dailymotion url or video id>" [output_path]
 
     # Multiple videos listed in a text file (one URL per line, blank
     # lines and lines starting with # are ignored)
-    python download_dailymotion_video.py -f urls.txt [-o output_dir]
+    python main.py -f urls.txt [-o output_dir]
 """
 import argparse
 import http.client
