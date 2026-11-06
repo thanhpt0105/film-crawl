@@ -9,6 +9,7 @@ Film Crawl is a collection of command-line download tools, organized by service.
 - **YouTube**: Download videos with `yt-dlp`; uses `imageio-ffmpeg` to merge separate audio and video streams when required. See [youtube/README.md](youtube/README.md).
 - **iQIYI**: Interactive and batch video downloads, subtitles-only mode, episode-link extraction, and Sonarr naming. Windows video downloads bootstrap `N_m3u8DL-RE` and FFmpeg in the service folder. See [iqiyi/README.md](iqiyi/README.md).
 - **Phimfly**: Batch subtitle downloading and current-season episode-link extraction. Requires private Phimfly cookies in Netscape format. See [phimfly/README.md](phimfly/README.md).
+- **Viu**: Download subtitle tracks from episode pages and generate season episode URL lists. See [viu/README.md](viu/README.md).
 
 ## Setup
 

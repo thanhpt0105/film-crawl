@@ -1,3 +1,4 @@
 -r youtube/requirements.txt
 -r iqiyi/requirements.txt
 -r phimfly/requirements.txt
+-r viu/requirements.txt
