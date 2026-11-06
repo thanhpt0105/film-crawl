@@ -25,12 +25,11 @@ Activate this environment once in each new terminal. Then change into a service 
 
 ## Shared Sonarr Renamer
 
-The root-level `rename_sonarr.py` works with output from any downloader. It previews changes by default, recognizes language names and codes in subtitle filenames, and infers seasons from `SxxEyy` names unless `--season` is supplied. Files are moved into `Downloads/<Show>/` with videos at the show-folder root. If subtitles contain multiple recognized languages, each language gets a subfolder such as `en/` or `vi/`; a single subtitle language stays at the show-folder root. Dry-run output shows full source and destination paths.
+The root-level `rename_sonarr.py` works with output from any downloader. It previews changes by default, recognizes language names and codes in subtitle filenames, and infers seasons from `SxxEyy` names unless `--season` is supplied. Files are moved into `Downloads/<Show>/` with videos at the show-folder root. If the selected show has multiple recognized subtitle languages, each gets a subfolder such as `en/` or `vi/`; a single language stays at the show-folder root. Dry-run output shows full source and destination paths. `--source-show` selects the source title or alias; by default it uses `--show`, matching case, punctuation, and Vietnamese accents insensitively. Before applying, the tool refuses the entire operation if destinations collide or already exist.
 
 ```powershell
-python rename_sonarr.py --show The.Lament.of.Autumn --downloads iqiyi/Downloads
-python rename_sonarr.py --show The.Lament.of.Autumn --downloads iqiyi/Downloads --apply
-python rename_sonarr.py --show A.Shop.For.Killers --downloads phimfly/Downloads/Phimfly
+python rename_sonarr.py --show Reply.1994 --source-show "Reply 1994" --downloads phimfly/Downloads/Phimfly
+python rename_sonarr.py --show Reply.1994 --source-show "Reply 1994" --downloads phimfly/Downloads/Phimfly --apply
 ```
 
 See `python rename_sonarr.py --help` for resolution and ignored-folder options.

@@ -46,9 +46,9 @@ The link tool uses the same cookies. It refuses to overwrite an existing output 
 
 ## Sonarr Naming
 
-Run the shared renamer from this directory to process Phimfly subtitle-only folders. It detects Phimfly's language prefixes and infers the season from the episode title when available:
+Run the shared renamer from this directory to process only the selected show's subtitle folders. `--source-show` selects matching input folders while `--show` sets the Sonarr name. Matching ignores case, punctuation and Vietnamese accents. It detects Phimfly's language prefixes, infers the season from the episode title when available, and refuses to apply if any destination collides or already exists:
 
 ```powershell
-python ..\rename_sonarr.py --show A.Shop.For.Killers --downloads Downloads\Phimfly
-python ..\rename_sonarr.py --show A.Shop.For.Killers --downloads Downloads\Phimfly --apply
+python ..\rename_sonarr.py --show Reply.1994 --source-show "Reply 1994" --downloads Downloads\Phimfly
+python ..\rename_sonarr.py --show Reply.1994 --source-show "Reply 1994" --downloads Downloads\Phimfly --apply
 ```

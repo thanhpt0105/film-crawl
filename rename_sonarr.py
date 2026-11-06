@@ -62,6 +62,11 @@ def strip_accents(text: str) -> str:
     return text.translate(fold_table)
 
 
+def normalize_show_key(name: str) -> str:
+    folded = strip_accents(name).lower()
+    return re.sub(r"[^a-z0-9]+", " ", folded).strip()
+
+
 def infer_episode_number(text: str) -> int | None:
     patterns = [
         r"\b[Ss](\d{1,2})[Ee](\d{1,3})\b",
@@ -121,16 +126,41 @@ def build_new_basename(show: str, season: int, episode: int, resolution: str) ->
     return f"{show}.S{season:02d}E{episode:02d}.{resolution}"
 
 
-def plan_renames(downloads_dir: Path, show: str, season: int | None, resolution: str, ignore_dirs=("archive",)):
+def plan_renames(
+    downloads_dir: Path,
+    show: str,
+    season: int | None,
+    resolution: str,
+    ignore_dirs=("archive",),
+    source_show: str | None = None,
+):
     plans = []
     skipped = []
     processed_subs = set()
+    source_show = source_show or show
+    source_key = normalize_show_key(source_show)
     show_dir = downloads_dir / show
 
     def is_ignored(path: Path) -> bool:
         return any(part.lower() in ignore_dirs for part in path.relative_to(downloads_dir).parts[:-1])
 
-    all_files = [p for p in downloads_dir.rglob("*") if p.is_file() and not is_ignored(p)]
+    def matches_source_show(path: Path) -> bool:
+        parts = (downloads_dir.name, *path.relative_to(downloads_dir).parts)
+        for part in parts:
+            key = normalize_show_key(part)
+            if key == source_key or key.startswith(source_key + " "):
+                return True
+        return False
+
+    all_files = [
+        p for p in downloads_dir.rglob("*")
+        if p.is_file() and not is_ignored(p) and matches_source_show(p)
+    ]
+    if not all_files:
+        raise ValueError(
+            f"No files matched source show '{source_show}' under '{downloads_dir}'. "
+            "Use --source-show to specify the source folder/name."
+        )
     all_subs = sorted(p for p in all_files if p.suffix.lower() in SUB_EXTS)
     all_videos = sorted(p for p in all_files if p.suffix.lower() in VIDEO_EXTS)
     languages = {lang for sub in all_subs if (lang := extract_lang_token(sub.stem))}
@@ -197,7 +227,31 @@ def plan_renames(downloads_dir: Path, show: str, season: int | None, resolution:
     return plans, skipped
 
 
+def find_plan_conflicts(plans):
+    sources_by_target = {}
+    planned_sources = {old for old, new in plans if old != new}
+    for old, new in plans:
+        sources_by_target.setdefault(new, []).append(old)
+
+    conflicts = []
+    for target, sources in sources_by_target.items():
+        if len(sources) > 1:
+            conflicts.append(f"Multiple source files target {target}: " + ", ".join(str(p) for p in sources))
+        if target.exists() and target not in sources:
+            conflicts.append(f"Target already exists: {target}")
+        if target in planned_sources and target not in sources:
+            conflicts.append(f"Target is also a source file in this plan: {target}")
+    return conflicts
+
+
 def apply_plans(plans, dry_run: bool):
+    conflicts = find_plan_conflicts(plans)
+    if conflicts:
+        print("[ERROR] Rename plan has conflicts; no files were changed.")
+        for conflict in conflicts:
+            print(f"[CONFLICT] {conflict}")
+        return -1
+
     renamed = 0
     for old, new in plans:
         if old == new:
@@ -226,6 +280,10 @@ def main():
     parser.add_argument("--resolution", default="1080p", help="Quality tag (default: 1080p)")
     parser.add_argument("--downloads", default="Downloads", help="Downloads folder path")
     parser.add_argument(
+        "--source-show",
+        help="Source show name/alias used to select files (default: --show)",
+    )
+    parser.add_argument(
         "--ignore",
         nargs="*",
         default=["Archive"],
@@ -239,9 +297,17 @@ def main():
         raise SystemExit(f"Downloads folder not found: {downloads_dir}")
 
     show = sanitize_show_name(args.show)
-    plans, skipped = plan_renames(
-        downloads_dir, show, args.season, args.resolution, tuple(n.lower() for n in args.ignore)
-    )
+    try:
+        plans, skipped = plan_renames(
+            downloads_dir,
+            show,
+            args.season,
+            args.resolution,
+            tuple(n.lower() for n in args.ignore),
+            args.source_show,
+        )
+    except ValueError as exc:
+        parser.error(str(exc))
 
     if not plans:
         print("No media files found to rename.")
@@ -249,6 +315,8 @@ def main():
         mode = "APPLY" if args.apply else "DRY-RUN"
         print(f"Mode: {mode}")
         renamed = apply_plans(plans, dry_run=not args.apply)
+        if renamed < 0:
+            return 1
         if args.apply:
             print(f"Renamed {renamed} file(s).")
 
@@ -256,7 +324,8 @@ def main():
         print("\nSkipped files:")
         for file_path, reason in skipped:
             print(f"- {file_path}: {reason}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
