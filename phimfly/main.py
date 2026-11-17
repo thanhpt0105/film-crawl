@@ -13,6 +13,9 @@ from bs4 import BeautifulSoup
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from rename_sonarr import build_new_basename, extract_lang_token, sanitize_show_name
+
 
 def load_session(cookie_file):
     cookies = http.cookiejar.MozillaCookieJar(str(cookie_file))
@@ -50,7 +53,7 @@ def safe_name(value):
     return name[:160] or "subtitle"
 
 
-def download_page(session, url, output_dir, languages):
+def download_page(session, url, output_dir, languages, show=None, season=None, resolution="1080p"):
     parsed = urlsplit(url)
     if parsed.scheme != "https" or parsed.hostname not in ("phimfly.com", "www.phimfly.com") or not parsed.path.startswith("/watch/"):
         raise ValueError("URL must be an HTTPS Phimfly watch page.")
@@ -65,15 +68,34 @@ def download_page(session, url, output_dir, languages):
 
     soup = BeautifulSoup(response.text, "html.parser")
     title = safe_name(soup.title.get_text(strip=True) if soup.title else parsed.path.rsplit("/", 1)[-1])
-    output = Path(output_dir) / title
-    output.mkdir(parents=True, exist_ok=True)
+    match = re.fullmatch(r"(.+?)\s+-\s+[Ss](\d{1,2})[Ee](\d{1,3})", title)
+    show_name = sanitize_show_name(show or (match.group(1).split(" - ", 1)[0] if match else ""))
+    base = None
+    if match and show_name:
+        base = build_new_basename(show_name, season if season is not None else int(match.group(2)), int(match.group(3)), resolution)
+    else:
+        print(f"Could not infer Sonarr episode name from '{title}'; keeping original filenames.", file=sys.stderr)
+
+    track_languages = [extract_lang_token(str(sub.get("language", "und"))) for sub in selected]
+    separate_language_dirs = len({lang for lang in track_languages if lang}) > 1
     for subtitle in selected:
         filename = subtitle["fileName"]
         subtitle_id = str(subtitle["subsceneId"])
         if subtitle.get("rand"):
             subtitle_id += "~" + str(subtitle["rand"])
         endpoint = f"https://phimfly.com/api/subtitle/{quote(subtitle_id, safe='')}/{quote(filename, safe='')}"
-        target = output / f"{safe_name(str(subtitle.get('language', 'und')))}.{subtitle['id']}.{safe_name(filename)}"
+        language = extract_lang_token(str(subtitle.get("language", "und")))
+        if base and language and track_languages.count(language) == 1:
+            output = Path(output_dir) / show_name
+            target = output / language / f"{base}.{language}{Path(filename).suffix.lower()}" if separate_language_dirs else output / f"{base}.{language}{Path(filename).suffix.lower()}"
+            alternate = output / f"{base}.{language}{Path(filename).suffix.lower()}" if separate_language_dirs else output / language / f"{base}.{language}{Path(filename).suffix.lower()}"
+            if alternate.exists():
+                target = alternate
+        else:
+            output = Path(output_dir) / title
+            target = output / f"{safe_name(str(subtitle.get('language', 'und')))}.{subtitle['id']}.{safe_name(filename)}"
+            if base:
+                print(f"Could not safely name subtitle '{filename}'; keeping original filename.", file=sys.stderr)
         if target.exists():
             print(f"Skipping existing file: {target}")
             continue
@@ -81,6 +103,7 @@ def download_page(session, url, output_dir, languages):
         result.raise_for_status()
         content = decrypt_subtitle(filename, result.text.strip())
         content.decode("utf-8")
+        target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(content)
         print(f"Downloaded: {target}")
 
@@ -92,6 +115,9 @@ def main():
     parser.add_argument("--cookies", default="cookies/cookies.txt", help="Netscape-format cookies file")
     parser.add_argument("--output", default="Downloads/Phimfly", help="Output directory")
     parser.add_argument("--lang", action="append", help="Language code to download; repeat for multiple languages")
+    parser.add_argument("--show", help="Override the Sonarr show name")
+    parser.add_argument("--season", type=int, help="Override the season number")
+    parser.add_argument("--resolution", default="1080p", help="Sonarr quality tag (default: 1080p)")
     args = parser.parse_args()
 
     try:
@@ -111,7 +137,7 @@ def main():
     for index, url in enumerate(urls, start=1):
         print(f"[{index}/{len(urls)}] {url}")
         try:
-            download_page(session, url, args.output, languages)
+            download_page(session, url, args.output, languages, args.show, args.season, args.resolution)
         except (OSError, ValueError, KeyError, requests.RequestException) as exc:
             print(f"Subtitle download failed for {url}: {exc}", file=sys.stderr)
             failed.append(url)
