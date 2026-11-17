@@ -69,15 +69,9 @@ def find_ffmpeg() -> str | None:
 
 FFMPEG_PATH = find_ffmpeg()
 
-# Prefer a pre-muxed stream (no ffmpeg needed) when available, otherwise
-# fall back to merging the best separate video+audio streams (requires
-# ffmpeg).
-FORMAT_WITH_FFMPEG = (
-    "best[acodec!=none][vcodec!=none][ext=mp4]/"
-    "best[acodec!=none][vcodec!=none]/"
-    "bestvideo[ext=mp4]+bestaudio[ext=m4a]/"
-    "bestvideo+bestaudio/best"
-)
+# Pre-muxed YouTube streams are capped at low quality, so with ffmpeg merge
+# the best separate video+audio streams (any codec; remuxed into mp4).
+FORMAT_WITH_FFMPEG = "bestvideo*+bestaudio/best"
 FORMAT_WITHOUT_FFMPEG = (
     "best[acodec!=none][vcodec!=none][ext=mp4]/"
     "best[acodec!=none][vcodec!=none]"
